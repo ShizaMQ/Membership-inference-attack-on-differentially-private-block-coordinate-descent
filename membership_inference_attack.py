@@ -11,9 +11,7 @@ from sklearn import model_selection
 import models
 from data_structures import AttackInputData
 from data_structures import AttackResults
-from data_structures import AttackType
 from data_structures import DataSize
-from data_structures import MembershipProbabilityResults
 from data_structures import PrivacyReportMetadata
 from data_structures import RocCurve
 from data_structures import SingleAttackResult
@@ -47,22 +45,10 @@ def _run_trained_attack(attack_input: AttackInputData,
   features = prepared_attacker_data.features_all
   labels = prepared_attacker_data.labels_all
 
-  # We are going to train multiple models on disjoint subsets of the data
-  # (`features`, `labels`), so we can get the membership scores of all samples,
-  # and each example gets its score assigned only once.
-  # An alternative implementation is to train multiple models on overlapping
-  # subsets of the data, and take an average to get the score for each sample.
-  # `scores` will record the membership score of each sample, initialized to nan
-  scores = np.full(features.shape[0], np.nan)
-
-  # We use StratifiedKFold to create disjoint subsets of samples. Notice that
-  # the index it returns is with respect to the samples shuffled with `indices`.
   kf = model_selection.StratifiedKFold(cross_validation_folds, shuffle=False)
   for train_indices_in_shuffled, test_indices_in_shuffled in kf.split(
       features[indices], labels[indices]):
-    # `train_indices_in_shuffled` is with respect to the data shuffled with
-    # `indices`. We convert it to `train_indices` to work with the original
-    # data (`features` and 'labels').
+ 
     train_indices = indices[train_indices_in_shuffled]
     test_indices = indices[test_indices_in_shuffled]
     # Make sure one sample only got score predicted once
@@ -73,14 +59,13 @@ def _run_trained_attack(attack_input: AttackInputData,
     predictions = attacker.predict(features[test_indices])
     scores[test_indices] = predictions
 
-  # Predict the left out with the last attacker
+  
   if left_out_indices.size:
     assert np.all(np.isnan(scores[left_out_indices]))
     scores[left_out_indices] = attacker.predict(features[left_out_indices])
   assert not np.any(np.isnan(scores))
 
   # Generate ROC curves with scores.
-  fpr, tpr, thresholds = metrics.roc_curve(labels, scores)
   roc_curve = RocCurve(tpr=tpr, fpr=fpr, thresholds=thresholds)
 
   in_train_indices = (labels == 0)
@@ -147,23 +132,6 @@ def _run_attack(attack_input: AttackInputData,
                 balance_attacker_training: bool = True,
                 min_num_samples: int = 1,
                 backend: Optional[str] = None):
-  """Runs membership inference attacks for specified input and type.
-  Args:
-    attack_input: input data for running an attack
-    attack_type: the attack to run
-    balance_attacker_training: Whether the training and test sets for the
-      membership inference attacker should have a balanced (roughly equal)
-      number of samples from the training and test sets used to develop the
-      model under attack.
-    min_num_samples: minimum number of examples in either training or test data.
-    backend: The Scikit-Learn/Joblib backend to use for model training, defaults
-      to `None`, which will use single-threaded training. Note that some systems
-      may not support multiprocessing and in those cases the `threading` backend
-      should be used. See https://joblib.readthedocs.io/en/latest/parallel.html
-      for more details.
-  Returns:
-    the attack result.
-  """
   attack_input.validate()
   if min(attack_input.get_train_size(),
          attack_input.get_test_size()) < min_num_samples:
@@ -185,27 +153,7 @@ def run_attacks(attack_input: AttackInputData,
                 balance_attacker_training: bool = True,
                 min_num_samples: int = 1,
                 backend: Optional[str] = None) -> AttackResults:
-  """Runs membership inference attacks on a classification model.
-  It runs attacks specified by attack_types on each attack_input slice which is
-   specified by slicing_spec.
-  Args:
-    attack_input: input data for running an attack
-    slicing_spec: specifies attack_input slices to run attack on
-    attack_types: attacks to run
-    privacy_report_metadata: the metadata of the model under attack.
-    balance_attacker_training: Whether the training and test sets for the
-      membership inference attacker should have a balanced (roughly equal)
-      number of samples from the training and test sets used to develop the
-      model under attack.
-    min_num_samples: minimum number of examples in either training or test data.
-    backend: The Scikit-Learn/Joblib backend to use for model training, defaults
-      to `None`, which will use single-threaded training. Note that some systems
-      may not support multiprocessing and in those cases the `threading` backend
-      should be used. See https://joblib.readthedocs.io/en/latest/parallel.html
-      for more details.
-  Returns:
-    the attack result.
-  """
+
 
   attack_input.validate()
   attack_results = []
@@ -222,15 +170,13 @@ def run_attacks(attack_input: AttackInputData,
   logging.info('Will run %s attacks on each of %s slice specifications.',
                num_attacks, num_slice_specs)
   for single_slice_spec in input_slice_specs:
-    attack_input_slice = get_slice(attack_input, single_slice_spec)
-    for attack_type in attack_types:
+
       logging.info('Running attack: %s', attack_type.name)
       attack_result = _run_attack(attack_input_slice, attack_type,
                                   balance_attacker_training, min_num_samples,
                                   backend)
       if attack_result is not None:
         logging.info('%s attack had an AUC=%s and attacker advantage=%s',
-                     attack_type.name, attack_result.get_auc(),
                      attack_result.get_attacker_advantage())
         attack_results.append(attack_result)
 
@@ -245,16 +191,7 @@ def run_attacks(attack_input: AttackInputData,
 def _compute_membership_probability(
     attack_input: AttackInputData,
     num_bins: int = 15) -> SingleMembershipProbabilityResult:
-  """Computes each individual point's likelihood of being a member (denoted as privacy risk score in https://arxiv.org/abs/2003.10595).
-  For an individual sample, its privacy risk score is computed as the posterior
-  probability of being in the training set
-  after observing its prediction output by the target machine learning model.
-  Args:
-    attack_input: input data for compute membership probability
-    num_bins: the number of bins used to compute the training/test histogram
-  Returns:
-    membership probability results
-  """
+
 
   # Uses the provided loss or entropy. Otherwise computes the loss.
   if attack_input.loss_train is not None and attack_input.loss_test is not None:
@@ -392,17 +329,7 @@ def _get_numpy_binary_accuracy(preds: ArrayLike, labels: ArrayLike):
 
 
 def _get_multilabel_accuracy(preds: ArrayLike, labels: ArrayLike):
-  """Computes the accuracy over multilabel data if it is missing.
-  Compute multilabel binary accuracy. AUC is a better measure of model quality
-  for multilabel classification than accuracy, in particular when the classes
-  are imbalanced. For consistency with the single label classification case,
-  we compute and return the binary accuracy over the labels and predictions.
-  Args:
-    preds: Prediction probabilities.
-    labels: Ground truth multihot labels.
-  Returns:
-    The binary accuracy averaged across all labels.
-  """
+ 
   if preds is None or labels is None:
     return None
   return _get_numpy_binary_accuracy(preds, labels)
