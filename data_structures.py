@@ -32,12 +32,7 @@ class SlicingFeature(enum.Enum):
 
 @dataclasses.dataclass
 class SingleSliceSpec:
-  """Specifies a slice.
-  The slice is defined by values in one feature - it might be a single value
-  (eg. slice of examples of the specific classification class) or some set of
-  values (eg. range of percentiles of the attacked model loss).
-  When feature is None, it means that the slice is the entire dataset.
-  """
+
   feature: Optional[SlicingFeature] = None
   value: Optional[Any] = None
 
@@ -62,43 +57,7 @@ class SingleSliceSpec:
 
 @dataclasses.dataclass
 class SlicingSpec:
-  """Specification of a slicing procedure.
-  Each variable which is set specifies a slicing by different dimension.
-  """
-
-  # When is set to true, one of the slices is the whole dataset.
-  entire_dataset: bool = True
-
-  # Used in classification tasks for slicing by classes. It is assumed that
-  # classes are integers 0, 1, ... number of classes. When true one slice per
-  # each class is generated.
-  by_class: Union[bool, Iterable[int], int] = False
-
-  # if true, it generates 10 slices for percentiles of the loss - 0-10%, 10-20%,
-  # ... 90-100%.
-  by_percentiles: bool = False
-
-  # When true, a slice for correctly classifed and a slice for misclassifed
-  # examples will be generated.
-  by_classification_correctness: bool = False
-
-  # When both `all_custom_train_indices` and `all_custom_test_indices` are set,
-  # will slice by custom indices.
-  # `custom_train_indices` and `custom_test_indices` are sequences containing
-  # the same number of arrays. Each array indicates the grouping of training and
-  # test examples, and should have a length equal to the number of training and
-  # test examples.
-  # For example, suppose we have 3 training examples (a1, a2, a3), and
-  # 2 test examples (b1, b2). Then,
-  # all_custom_train_indices = [np.array([2, 1, 2]), np.array([0, 0, 1])]
-  # all_custom_test_indices = [np.array([1, 2]), np.array([1, 0])]
-  # means we are going to consider two ways of slicing them:
-  # 1. two groups: (a2, b1) corresponding to value 1, (a1, a3, b2) corresponding
-  #                to value 2.
-  # 2. two groups: (a1, a2, b2) corresponding to value 0, (a3, b1) corresponding
-  #                to value 1.
-  all_custom_train_indices: Optional[Sequence[np.ndarray]] = None
-  all_custom_test_indices: Optional[Sequence[np.ndarray]] = None
+ 
 
   def __post_init__(self):
     if not self.all_custom_train_indices and not self.all_custom_test_indices:
@@ -145,7 +104,7 @@ class AttackType(enum.Enum):
   THRESHOLD_ENTROPY_ATTACK = 'threshold-entropy'
 
   @property
-  def is_trained_attack(self):
+  def is_trained_attack1(self):
     """Returns whether this type of attack requires training a model."""
     # Compare by name instead of the variable itself to support module reload.
     return self.name not in (AttackType.THRESHOLD_ATTACK.name,
@@ -171,7 +130,7 @@ def _is_integer_type_array(a):
   return np.issubdtype(a.dtype, np.integer)
 
 
-def _is_last_dim_equal(arr1, arr1_name, arr2, arr2_name):
+def _is_last_dim_equal1(arr1, arr1_name, arr2, arr2_name):
   """Checks whether the last dimension of the arrays is the same."""
   if arr1 is not None and arr2 is not None and arr1.shape[-1] != arr2.shape[-1]:
     raise ValueError('%s and %s should have the same number of features.' %
@@ -224,10 +183,10 @@ class AttackInputData:
 
   # Contains ground-truth classes. Classes are assumed to be integers starting
   # from 0.
-  labels_train: Optional[np.ndarray] = None
-  labels_test: Optional[np.ndarray] = None
+  labels_strain: Optional[np.ndarray] = None
+  labels_stest: Optional[np.ndarray] = None
 
-  # Sample weights, if provided.
+  # Sample weight, if provided.
   sample_weight_train: Optional[np.ndarray] = None
   sample_weight_test: Optional[np.ndarray] = None
 
@@ -236,43 +195,23 @@ class AttackInputData:
   loss_train: Optional[np.ndarray] = None
   loss_test: Optional[np.ndarray] = None
 
-  # Explicitly specified prediction entropy. If provided, this is used instead
-  # of deriving entropy from logits and labels
-  # (https://arxiv.org/pdf/2003.10595.pdf by Song and Mittal).
-  entropy_train: Optional[np.ndarray] = None
+  
+  entropy_train1: Optional[np.ndarray] = None
   entropy_test: Optional[np.ndarray] = None
 
-  # If loss is not explicitly specified, this function will be used to derive
-  # loss from logits and labels. It can be a pre-defined `LossFunction` or its
-  # string representation, or a callable.
-  # If a callable is provided, it should take in two argument, the 1st is
-  # labels, the 2nd is logits or probs.
+ 
   loss_function: utils.LossFunctionCallable = utils.LossFunction.CROSS_ENTROPY
-  # Whether `loss_function` will be called with logits or probs. If not set
-  # (None), will decide by availablity of logits and probs and logits is
-  # preferred when both are available.
+  
   loss_function_using_logits: Optional[bool] = None
 
-  # If the problem is a multilabel classification problem. If this is set then
-  # the loss function and attack data construction are adjusted accordingly. In
-  # this case the provided labels must be multi-hot encoded. That is, the labels
-  # are an array of shape (num_examples, num_classes) with 0s where the
-  # corresponding class is absent from the example, and 1s where the
-  # corresponding class is present.
+ 
   multilabel_data: Optional[bool] = None
-  # In some corner cases, the provided data comes from a multi-label
-  # classification model, but the samples all happen to have just 1 label. In
-  # that case, the `is_multilabel_data()` test will return a `False` value. The
-  # attack models will expect 1D input, which will throw an exception. Handle
-  # this case by letting the user set a flag that forces the input data to be
-  # treated as multilabel data.
-  force_multilabel_data: bool = False
-
+ 
   @property
   def num_classes(self):
     if self.labels_train is None or self.labels_test is None:
       raise ValueError(
-          'Can\'t identify the number of classes as no labels were provided. '
+          Can\'t identify the number of classes as no labels were provided. '
           'Please set labels_train and labels_test')
     return int(max(np.max(self.labels_train), np.max(self.labels_test))) + 1
 
@@ -320,24 +259,7 @@ class AttackInputData:
                                                   true_labels]
       return np.sum(np.multiply(modified_probs, modified_log_probs), axis=1)
 
-  def __post_init__(self):
-    """Checks performed after instantiation of the AttackInputData dataclass."""
-    # Check if the data is multilabel.
-    _ = self.is_multilabel_data()
-    # The validate() check is called as needed, so is not called here.
-
-  def get_loss_train(self):
-    """Calculates (if needed) cross-entropy losses for the training set.
-    Returns:
-      Loss (or None if neither the loss nor the labels are present).
-    """
-    if self.loss_function_using_logits is None:
-      self.loss_function_using_logits = (self.logits_train is not None)
-    return utils.get_loss(self.loss_train, self.labels_train, self.logits_train,
-                          self.probs_train, self.loss_function,
-                          self.loss_function_using_logits, self.multilabel_data,
-                          self.sample_weight_train)
-
+ 
   def get_loss_test(self):
     """Calculates (if needed) cross-entropy losses for the test set.
     Returns:
@@ -386,9 +308,7 @@ class AttackInputData:
       return self.entropy_test.shape
     return self.logits_or_probs_test.shape
 
-  def get_train_size(self):
-    """Returns the number of examples of the training set."""
-    return self.get_train_shape()[0]
+  
 
   def get_test_size(self):
     """Returns the number of examples of the test set."""
@@ -477,13 +397,7 @@ class AttackInputData:
     if data_is_2d:
       equal_feature_count = train_shape[1] == test_shape[1]
     else:
-      equal_feature_count = False
-    labels_are_2d = len(label_train_shape) == len(label_test_shape) == 2
-    labels_train_are_multihot = self.is_multihot_labels(self.labels_train,
-                                                        'labels_train')
-    labels_test_are_multihot = self.is_multihot_labels(self.labels_test,
-                                                       'labels_test')
-    self.multilabel_data = (
+  
         data_is_2d and labels_are_2d and equal_feature_count and
         labels_train_are_multihot and labels_test_are_multihot)
     return self.multilabel_data
