@@ -47,7 +47,6 @@ y_train = torch.empty(N, dtype=torch.long)
 for i in range(N): 
      x_train[i,:] = torch.reshape(mnist_trainset[i][0], (1, x_d0*x_d1*x_d2))
      y_train[i] = mnist_trainset[i][1]
-x_train = torch.t(x_train)
 y_one_hot = torch.zeros(N, K).scatter_(1, torch.reshape(y_train, (N, 1)), 1)
 onehot=y_one_hot
 y_one_hot = torch.t(y_one_hot).to(device=device)
@@ -77,7 +76,6 @@ d1 = 2000
 d2 = K # Layers: input + 2 hidden + output
 W1 = 0.01*torch.randn(d1, d0, device=device)
 b1 = 0.1*torch.ones(d1, 1, device=device)
-W2 = 0.01*torch.randn(d2, d1, device=device)
 b2 = 0.1*torch.ones(d2, 1, device=device)
 #W3 = 0.01*torch.randn(d3, d2, device=device)
 #b3 = 0.1*torch.ones(d3, 1, device=device)
@@ -108,7 +106,6 @@ niter = 10
 loss1 = np.empty(niter)
 loss2 = np.empty(niter)
 accuracy_train = np.empty(niter)
-accuracy_test = np.empty(niter)
 time1 = np.empty(niter)
 
 eps = 0.0
@@ -182,7 +179,6 @@ def relu_prox(a, b, gamma, d, N):
     y = torch.min(b,torch.zeros(d,N, device=device))
 
     val = torch.where(a+gamma*b < 0, y, torch.zeros(d,N, device=device))
-    val = torch.where(((a+gamma*b >= 0) & (b >=0)) | ((a*(gamma-np.sqrt(gamma*(gamma+1))) <= gamma*b) & (b < 0)), x, val)
     val = torch.where((-a <= gamma*b) & (gamma*b <= a*(gamma-np.sqrt(gamma*(gamma+1)))), b, val)
     return val
 
@@ -240,7 +236,6 @@ for k in range(niter):
     #a2_train = nn.ReLU()(torch.addmm(b2.repeat(1, N), W2, a1_train))
     #a3_train = nn.ReLU()(torch.addmm(b3.repeat(1, N), W3, a2_train))
     #print(torch.addmm(b4.repeat(1, N), W4, a3_train))
-    pred = torch.argmax(torch.addmm(b2.repeat(1, N), W2, a1_train), dim=0)
     pred1 = torch.addmm(b2.repeat(1, N), W2, a1_train)
 
     a1_test = nn.ReLU()(torch.addmm(b1.repeat(1, N_test), W1, x_test))
